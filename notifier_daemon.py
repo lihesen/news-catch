@@ -97,16 +97,6 @@ if __name__ == "__main__":
     # 
     # 如果想直接在后台死循环持久运行（每小时执行一次）：
     # ==========================
-    FETCH_INTERVAL_SECONDS = 3600
-    
     logger.info(f"启动自动监听模式，每 {FETCH_INTERVAL_SECONDS} 秒扫描一次以防遗漏...")
-    
     # 刚启动时可以先跑一下弥补启动前的空白
     job_fetch_and_notify()
-    
-    while True:
-        time.sleep(FETCH_INTERVAL_SECONDS)
-        try:
-            job_fetch_and_notify()
-        except Exception as e:
-            logger.error(f"自动化扫描遇到不可预期的错误: {e}")
