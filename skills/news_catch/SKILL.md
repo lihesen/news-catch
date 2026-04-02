@@ -26,14 +26,11 @@ from news_client import NewsClient
 
 client = NewsClient()
 
-# 1. 提取带关键词过滤的新浪财经新闻 (例如：A股, 宏观)
-# 如果不需要过滤，请去掉 category 参数
-sina_news = client.get_sina_finance_news(limit=10, category="A股")
+# 【最佳实践】抓取最近 12 小时的全部新闻，而不是用 category 过滤
+sina_news = client.get_sina_finance_news(hours=12)
+zaobao_news = client.get_zaobao_news(hours=12)
 
-# 2. 提取新加坡联合早报的大事追踪
-zaobao_news = client.get_zaobao_news(limit=10, category="科技")
-
-print(json.dumps(sina_news, ensure_ascii=False, indent=2))
+print(f"Fetched {len(sina_news)} items from the last 12 hours.")
 ```
 
 ## 📊 数据返回结构
@@ -53,5 +50,5 @@ print(json.dumps(sina_news, ensure_ascii=False, indent=2))
 
 ## ⚠️ 最佳实践指引
 
-1. **组合过滤**: 如果用户只需要“美股”新闻，请不要获取所有新闻后再由您大模型强行处理，而是直接在调用函数时加上 `category="美股"`，这样更节省上下文且精确。
-2. **容错处理**: 如果返回为空列表 `[]`，可能是因为暂时没有包含该关键词的新闻，告知用户不要强行捏造内容。
+1. **组合时间过滤进行 AI 深度判定**: 对于用户提出的抽象或复杂的行业分类要求（比如“关于新能源汽车的利空消息”），**切忌将整段话塞给 `category`**. 你必须使用 `hours` 参数拉回全量新闻后，将 `[{"title": "..."}]` 的 JSON 数据塞给你自己的大语言模型系统，让你的 AI 引擎去判定和提纯。
+2. **容错处理**: 如果返回为空列表 `[]`，可能是设定时间段内真的没有新闻，可以直接反馈给用户，不要捏造内容。

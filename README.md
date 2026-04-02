@@ -12,10 +12,13 @@
 
 类名：`NewsClient` (位于 `news_client.py`)
 
-1. **`get_sina_finance_news(limit: int = 20, category: str = None) -> List[Dict]`**
-   从新浪财经抓取 7x24 小时级别的文字快讯。支持传入 `category` 进行关键词过滤（如 'A股', '宏观'）。
-2. **`get_zaobao_news(limit: int = 20, category: str = None) -> List[Dict]`**
-   从新加坡联合早报抓取世界/即时新闻。同样支持传入 `category` 进行结果筛选。
+1. **`get_sina_finance_news(limit: int = 20, category: str = None, hours: float = None) -> List[Dict]`**
+   从新浪财经抓取 7x24 小时级别的文字快讯。支持传入 `category` 过滤，更推荐使用 `hours` 抓取某个时间窗内的全部数据。
+2. **`get_zaobao_news(limit: int = 20, category: str = None, hours: float = None) -> List[Dict]`**
+   从新加坡联合早报抓取世界/即时新闻。同样包含 `hours` 查阅参数。
+
+> 💡 **AI 分类最佳实践 (For Agents)**: 
+> 当处理模糊或者极其复杂的情感/题材分类（例如：“利空新闻”、“包含AI应用的初创企业”）时，建议不要传入 `category`。而是通过 `hours=12` 捞取该时间窗内的**全量**新闻，并在你的分析流程中利用你自身的大语言模型(LLM)来进行深入的情感和归属判定。
 
 ### 返回的标准化数据格式 (Standardized Return Schema)
 

@@ -72,63 +72,112 @@ class NewsClient:
             
         return time_str
 
-    def get_sina_finance_news(self, limit=20, category=None) -> list:
+    def get_sina_finance_news(self, limit=20, category=None, hours=None) -> list:
         """
         获取新浪财经 7x24 小时新闻快讯
-        :param limit: 返回的最大条数
-        :param category: 可选的分类/关键词过滤 (例如 'A股', '美股', '宏观')
+        :param limit: 返回的最大条数 (只有在未指定 hours 时生效最大约束)
+        :param category: 可选的分类/关键词过滤 (例如 'A股', '美股')
+        :param hours: 可选的查询时间窗 (例如 24 表示过去24小时内的新闻)
         """
-        # 如果有分类过滤，我们需要获取更多的近期数据从中筛选（抓取最近 200 条）
-        fetch_size = max(limit * 20, 200) if category else limit
-        url = f"https://zhibo.sina.com.cn/api/zhibo/feed?callback=&page=1&page_size={fetch_size}&zhibo_id=152"
-        results = []
-        try:
-            response = self.session.get(url, headers=self.headers, timeout=10)
-            data = response.json()
-            
-            # 兼容可能的数据结构
-            if 'data' in data.get('result', {}):
-                items = data['result']['data'].get('feed', {}).get('list', [])
-            else:
-                items = []
+        # 新浪财经内置的已知 Tag 映射表，用于大幅优化针对特定板块的查询（避免因为过了某些板块的活跃时间而抓取不到）
+        category_tag_map = {
+            "a股": 10,
+            "宏观": 7,
+            "科技": 3,
+            "美股": 4,
+            "公司": 8,
+            "公司要闻": 8,
+            "国际": 5,
+        }
+        
+        tag_id = 0
+        if category:
+            tag_id = category_tag_map.get(category.lower(), 0)
 
-            for item in items:
-                title = item.get('rich_text', '')
-                if not title:
-                    title = item.get('content', '')
-                    
-                if category and category.lower() not in title.lower():
-                    continue
-                    
-                create_time = self._normalize_time(item.get('create_time', ''))
-                docurl = item.get('docurl', '')
-                results.append({
-                    "source": "Sina Finance",
-                    "title": title,
-                    "time": create_time,
-                    "url": docurl
-                })
-                
-                if len(results) >= limit:
+        # 如果未命中映射表(tag_id=0)，且带有 category，则需要在本地海量数据中过滤
+        fetch_size = 200 if (category and tag_id == 0) or hours else limit
+        max_pages = 50 if hours else (5 if (category and tag_id == 0) else 1)
+        results = []
+        
+        target_time = None
+        if hours is not None:
+            target_time = datetime.now() - timedelta(hours=hours)
+            limit = float('inf') # 忽略原有的数量限制，以时间为准
+            
+        is_finished = False
+        
+        try:
+            for page in range(1, max_pages + 1):
+                if is_finished or len(results) >= limit:
                     break
+                    
+                url = f"https://zhibo.sina.com.cn/api/zhibo/feed?callback=&page={page}&page_size={fetch_size}&zhibo_id=152&tag_id={tag_id}"
+                response = self.session.get(url, headers=self.headers, timeout=10)
+                data = response.json()
+                
+                # 兼容可能的数据结构
+                if 'data' in data.get('result', {}):
+                    items = data['result']['data'].get('feed', {}).get('list', [])
+                else:
+                    items = []
+                
+                if not items:
+                    break
+                    
+                for item in items:
+                    title = item.get('rich_text', '')
+                    if not title:
+                        title = item.get('content', '')
+                        
+                    # 仅在我们不知道新浪的底层 tag 时，才进行强制的本地关键词模糊查询
+                    if category and tag_id == 0 and category.lower() not in title.lower():
+                        continue
+                        
+                    create_time = self._normalize_time(item.get('create_time', ''))
+                    
+                    if target_time:
+                        item_time_dt = datetime.strptime(create_time, "%Y-%m-%d %H:%M:%S")
+                        if item_time_dt < target_time:
+                            is_finished = True
+                            break
+                            
+                    docurl = item.get('docurl', '')
+                    results.append({
+                        "source": "Sina Finance",
+                        "title": title,
+                        "time": create_time,
+                        "url": docurl
+                    })
+                    
+                    if len(results) >= limit:
+                        is_finished = True
+                        break
         except Exception as e:
             logger.error(f"Error fetching Sina Finance: {e}")
             
         return results
 
-    def get_zaobao_news(self, limit=20, category=None) -> list:
+    def get_zaobao_news(self, limit=20, category=None, hours=None) -> list:
         """
         获取新加坡联合早报 即时新闻
         :param limit: 返回的最大条数
-        :param category: 可选的分类/关键词过滤 (例如 'A股', '美股', '宏观', '科技')
+        :param category: 可选的分类/关键词过滤 (例如 '科技')
+        :param hours: 可选的查询时间窗 (例如 24 表示过去24小时内的新闻)
         """
         base_url = "https://www.zaobao.com"
         results = []
-        max_pages = 5 if category else 1
+        max_pages = 50 if hours else (5 if category else 1)
+        
+        target_time = None
+        if hours is not None:
+            target_time = datetime.now() - timedelta(hours=hours)
+            limit = float('inf')
+            
+        is_finished = False
         
         try:
             for page in range(0, max_pages):
-                if len(results) >= limit:
+                if is_finished or len(results) >= limit:
                     break
                     
                 url = f"{base_url}/realtime?page={page}"
@@ -168,13 +217,25 @@ class NewsClient:
                     # 时间
                     time_div = card.find('div', class_=lambda x: x and 'timestamp' in x.lower())
                     time_str = time_div.get_text(strip=True) if time_div else ''
+                    normalized_time = self._normalize_time(time_str)
+                    
+                    if target_time:
+                        item_time_dt = datetime.strptime(normalized_time, "%Y-%m-%d %H:%M:%S")
+                        if item_time_dt < target_time:
+                            is_finished = True
+                            break
                         
                     results.append({
                         "source": "Lianhe Zaobao",
                         "title": title,
-                        "time": self._normalize_time(time_str),
+                        "time": normalized_time,
                         "url": link
                     })
+                    
+                    if len(results) >= limit:
+                        is_finished = True
+                        break
+                        
         except Exception as e:
             logger.error(f"Error fetching Lianhe Zaobao: {e}")
             
