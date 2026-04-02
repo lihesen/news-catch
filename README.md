@@ -20,6 +20,16 @@
 > 💡 **AI 分类最佳实践 (For Agents)**: 
 > 当处理模糊或者极其复杂的情感/题材分类（例如：“利空新闻”、“包含AI应用的初创企业”）时，建议不要传入 `category`。而是通过 `hours=12` 捞取该时间窗内的**全量**新闻，并在你的分析流程中利用你自身的大语言模型(LLM)来进行深入的情感和归属判定。
 
+## ⏰ 定时推送与长期监听 (Daemon/Scheduler)
+
+如果面临的需求是**“每小时监控并在控制台推送一次不重复的新闻”**，请不要自己在外面写死循环轮询 `NewsClient`。
+本项目已内置了解决防错漏、本地持久化指纹去重的守护脚本 `notifier_daemon.py`。
+只需直接后台运行此文件即可进入自适应每小时挂载的自动化防御性播报状态：
+```bash
+cd d:\python-workspace\news-catch
+.\venv\Scripts\python notifier_daemon.py
+```
+
 ### 返回的标准化数据格式 (Standardized Return Schema)
 
 不管是哪个抓取来源，列表内每一条都会返回一套字段固定为 `source`, `title`, `time`, `url` 的字典：
@@ -52,16 +62,16 @@ def main():
     # 1. 实例化客户端对象
     news_crawler = NewsClient()
 
-    # 2. 调用方法 (支持传入 category 过滤分类，例如 'A股', '科技')
-    sina_data = news_crawler.get_sina_finance_news(limit=5, category="A股")
-    zaobao_data = news_crawler.get_zaobao_news(limit=5, category="科技")
+    # 2. 调用方法 (基于时间片拉取过去 12 小时的内容)
+    sina_data = news_crawler.get_sina_finance_news(hours=12)
+    zaobao_data = news_crawler.get_zaobao_news(hours=12)
     
     # 3. 数据已经清洗完毕，直接输出或者将数据直接喂给大模型做总结分析
-    print("=== Sina ===")
-    print(json.dumps(sina_data, ensure_ascii=False, indent=2))
+    print("=== Sina (Past 12h) ===")
+    print(f"Fetched {len(sina_data)} Items.")
     
-    print("\n=== Zaobao ===")
-    print(json.dumps(zaobao_data, ensure_ascii=False, indent=2))
+    print("\n=== Zaobao (Past 12h) ===")
+    print(f"Fetched {len(zaobao_data)} Items.")
 
 if __name__ == "__main__":
     main()
